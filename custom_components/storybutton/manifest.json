@@ -1,0 +1,13 @@
+{
+    "domain": "storybutton",
+    "name": "Storybutton",
+    "documentation": "https://github.com/dacort/ha-storybutton",
+    "issue_tracker": "https://github.com/dacort/ha-storybutton/issues",
+    "requirements": ["upnpclient"],
+    "dependencies": [],
+    "version": "0.1",
+    "codeowners": ["@dacort"],
+    "iot_class": "local_polling",
+    "integration_type": "device"
+  }
+  

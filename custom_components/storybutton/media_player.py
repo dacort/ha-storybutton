@@ -60,6 +60,7 @@ class StoryButtonEntity(MediaPlayerEntity):
         self._host = host
         self._state = STATE_OFF
         self._attr_volume_level = 0
+        self._attr_media_title = ""
         self._supported_features = (
             MediaPlayerEntityFeature.PLAY
             | MediaPlayerEntityFeature.PAUSE
@@ -107,6 +108,7 @@ class StoryButtonEntity(MediaPlayerEntity):
 
         # Retrieve latest data
         try:
+            await self.async_update_media_title()
             await self.async_update_volume()
             if self._name is None:
                 self._name = self.sb_device.name()
@@ -167,3 +169,7 @@ class StoryButtonEntity(MediaPlayerEntity):
         else:
             await self.hass.async_add_executor_job(self.sb_device.unmute)
             self._attr_is_volume_muted = False
+
+    async def async_update_media_title(self):
+        self._attr_media_title = await self.hass.async_add_executor_job(self.sb_device.title)
+        _LOGGER.debug(self._attr_media_title)

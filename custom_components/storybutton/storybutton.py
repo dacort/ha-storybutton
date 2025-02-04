@@ -88,3 +88,11 @@ class Storybutton:
 
     def unmute(self):
         self.upnp_client.RenderingControl.SetMute(InstanceID=0, Channel='Master', DesiredMute="0")
+
+    def title(self):
+        try:
+            playing_endpoint = f"{self._endpoint}/php/playing.php"
+            resp = requests.get(playing_endpoint)
+            return resp.json().get('name')
+        except Exception:
+            return ""

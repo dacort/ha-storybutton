@@ -8,6 +8,7 @@
     "version": "0.1",
     "codeowners": ["@dacort"],
     "iot_class": "local_polling",
-    "integration_type": "device"
+    "integration_type": "device",
+    "config_flow": true
   }
   

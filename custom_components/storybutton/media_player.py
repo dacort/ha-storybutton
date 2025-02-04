@@ -21,12 +21,15 @@ from custom_components.storybutton.storybutton import State, Storybutton
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
-    """Set up the storybutton platform."""
-    # devices = [
-    #     MyMediaPlayer("Device 1", host="192.168.1.10"),
-    #     MyMediaPlayer("Device 2", host="192.168.1.11"),
-    # ]
+async def async_setup_platform(
+    hass: HomeAssistant, config, async_add_entities, discovery_info=None
+):
+    """Set up the storybutton platform.
+    Allows for a single device to be added in your configuration.yaml
+    media_player:
+      - platform: storybutton
+        host: 192.168.7.38
+    """
     host = config.get(CONF_HOST)
     name = config.get(CONF_NAME)
     _LOGGER.info(f"Setting up Storybutton {name}@{host}")
@@ -34,7 +37,16 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
         return
 
     device = StoryButtonEntity(hass, host, name)
+    async_add_entities([device], update_before_add=True)
 
+
+async def async_setup_entry(hass, config_entry, async_add_entities):
+    """Set up a Storybutton entity."""
+    # unique_id = config_entry.unique_id
+    name = config_entry.data[CONF_NAME]
+    host = config_entry.data[CONF_HOST]
+
+    device = StoryButtonEntity(hass, host, name)
     async_add_entities([device], update_before_add=True)
 
 

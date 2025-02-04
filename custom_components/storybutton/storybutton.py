@@ -1,6 +1,10 @@
+from dataclasses import dataclass
 from enum import Enum
-import upnpclient
+from typing import Callable, Optional
+
 import requests
+import upnpclient
+
 
 class State(Enum):
     UNKNOWN = 0
@@ -9,90 +13,162 @@ class State(Enum):
     PLAYING = 3
     PAUSED = 4
 
-class Storybutton:
-    """A utility to interact with the Storybutton"""
-    def __init__(self, host: str) -> None:
-        self._host = host
-        self._endpoint = f"http://{host}"
 
-        # We don't initialize this here b/c it makes a sync call and HA gets mad
-        self._upnp_client = None
-    
+@dataclass
+class StorybuttonConfig:
+    """Configuration for Storybutton instance."""
+
+    host: str
+    request_timeout: int = 3
+    http_client: requests.sessions.Session = requests.Session()
+    upnp_factory: Callable[[str], upnpclient.Device] = upnpclient.Device
+
+
+class Storybutton:
+    """A utility to interact with the Storybutton device."""
+
+    def __init__(self, config: StorybuttonConfig) -> None:
+        """
+        Initialize a new Storybutton instance.
+
+        Args:
+            config: StorybuttonConfig instance containing configuration
+        """
+        self._config = config
+        self._endpoint = f"http://{config.host}"
+        self._upnp_client: Optional[upnpclient.upnp.Device] = None
+        self._http_client = config.http_client
+
     @property
-    def upnp_client(self):
+    def upnp_client(self) -> upnpclient.Device:
+        """
+        Lazy initialization of UPnP client.
+
+        Returns:
+            UPnPDevice: The initialized UPnP client
+        """
         if not self._upnp_client:
-            self._upnp_client = upnpclient.Device(f"{self._endpoint}/device.xml")
-        
+            self._upnp_client = self._config.upnp_factory(
+                f"{self._endpoint}/device.xml"
+            )
         return self._upnp_client
-    
+
     def get_power_status(self) -> bool:
+        """
+        Check if the device is powered on and responding.
+
+        Returns:
+            bool: True if device is responding, False otherwise
+        """
         try:
-            requests.get(self._endpoint, timeout=3)
+            self._http_client.get(self._endpoint, timeout=self._config.request_timeout)
             return True
         except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
             return False
-    
+
     def status(self) -> State:
-        """Query the device for its status, if none, it's off"""
+        """
+        Query the device for its current playback status.
+
+        Returns:
+            State: Current state of the device
+        """
         if not self.get_power_status():
             return State.OFF
 
-        # The device is up, so get the transport info
         resp = self.upnp_client.AVTransport.GetTransportInfo(InstanceID=0)
-        current_state = resp.get('CurrentTransportState', None)
-        if current_state == 'PAUSED_PLAYBACK':
-            return State.PAUSED
-        elif current_state == 'PLAYING':
-            return State.PLAYING
-        else:
-            return State.UNKNOWN
-    
-    def name(self):
+        current_state = resp.get("CurrentTransportState")
+
+        return {"PAUSED_PLAYBACK": State.PAUSED, "PLAYING": State.PLAYING}.get(
+            current_state, State.UNKNOWN
+        )
+
+    def name(self) -> str:
+        """Get the friendly name of the device."""
         return self.upnp_client.friendly_name
-    
+
+    def get_volume(self) -> int:
+        """
+        Get the current volume level.
+
+        Returns:
+            int: Current volume (0-100)
+
+        Raises:
+            Exception: If volume information is not available
+        """
+        resp = self.upnp_client.RenderingControl.GetVolume(
+            InstanceID=0, Channel="Master"
+        )
+        if "CurrentVolume" not in resp:
+            raise Exception("No volume returned from device: ", resp)
+
+        return resp["CurrentVolume"]
+
+    def set_volume(self, desired_volume: int) -> None:
+        """Set the volume to a specific level."""
+        self.upnp_client.RenderingControl.SetVolume(
+            InstanceID=0,
+            Channel="Master",
+            DesiredVolume=max(0, min(100, desired_volume)),
+        )
+
     def volume_up(self) -> int:
+        """
+        Increase volume by one step.
+
+        Returns:
+            int: New volume level
+        """
         current_volume = self.get_volume()
         if current_volume < 100:
-            self.upnp_client.RenderingControl.SetVolume(InstanceID=0, Channel='Master', DesiredVolume=current_volume+1)
-            return current_volume+1
-        else:
-            return current_volume
-    
+            self.set_volume(current_volume + 1)
+            return current_volume + 1
+        return current_volume
+
     def volume_down(self) -> int:
+        """
+        Decrease volume by one step.
+
+        Returns:
+            int: New volume level
+        """
         current_volume = self.get_volume()
         if current_volume > 0:
-            self.upnp_client.RenderingControl.SetVolume(InstanceID=0, Channel='Master', DesiredVolume=current_volume-1)
-            return current_volume-1
-        else:
-            return current_volume
-    
-    def get_volume(self) -> int:
-        """Returns the current volume, a value between 0 and 100"""
-        resp = self.upnp_client.RenderingControl.GetVolume(InstanceID=0,Channel="Master")
-        if 'CurrentVolume' not in resp:
-            raise Exception("No volume returned from device: ", resp)
-        
-        return resp.get('CurrentVolume')
+            self.set_volume(current_volume - 1)
+            return current_volume - 1
+        return current_volume
 
-    def set_volume(self, desired_volume: int):
-        self.upnp_client.RenderingControl.SetVolume(InstanceID=0, Channel='Master', DesiredVolume=desired_volume)
+    def play(self) -> None:
+        """Start playback."""
+        self.upnp_client.AVTransport.Play(InstanceID=0, Speed="1")
 
-    def play(self):
-        self.upnp_client.AVTransport.Play(InstanceID=0, Speed='1')
-
-    def pause(self):
+    def pause(self) -> None:
+        """Pause playback."""
         self.upnp_client.AVTransport.Pause(InstanceID=0)
-    
-    def mute(self):
-        self.upnp_client.RenderingControl.SetMute(InstanceID=0, Channel='Master', DesiredMute="1")
 
-    def unmute(self):
-        self.upnp_client.RenderingControl.SetMute(InstanceID=0, Channel='Master', DesiredMute="0")
+    def mute(self) -> None:
+        """Mute the device."""
+        self.upnp_client.RenderingControl.SetMute(
+            InstanceID=0, Channel="Master", DesiredMute="1"
+        )
 
-    def title(self):
+    def unmute(self) -> None:
+        """Unmute the device."""
+        self.upnp_client.RenderingControl.SetMute(
+            InstanceID=0, Channel="Master", DesiredMute="0"
+        )
+
+    def title(self) -> str:
+        """
+        Get the currently playing title.
+
+        Returns:
+            str: Title of current content or empty string if unavailable
+        """
         try:
             playing_endpoint = f"{self._endpoint}/php/playing.php"
-            resp = requests.get(playing_endpoint)
-            return resp.json().get('name')
+            resp = self._http_client.get(playing_endpoint)
+            return resp.json().get("name", "")
         except Exception:
             return ""

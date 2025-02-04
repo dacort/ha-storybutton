@@ -16,7 +16,11 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 
-from custom_components.storybutton.storybutton import State, Storybutton
+from custom_components.storybutton.storybutton import (
+    State,
+    Storybutton,
+    StorybuttonConfig,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -69,7 +73,7 @@ class StoryButtonEntity(MediaPlayerEntity):
             | MediaPlayerEntityFeature.VOLUME_MUTE
         )
 
-        self.sb_device = Storybutton(self._host)
+        self.sb_device = Storybutton(StorybuttonConfig(self._host))
 
     @property
     def name(self):
@@ -171,5 +175,7 @@ class StoryButtonEntity(MediaPlayerEntity):
             self._attr_is_volume_muted = False
 
     async def async_update_media_title(self):
-        self._attr_media_title = await self.hass.async_add_executor_job(self.sb_device.title)
+        self._attr_media_title = await self.hass.async_add_executor_job(
+            self.sb_device.title
+        )
         _LOGGER.debug(self._attr_media_title)

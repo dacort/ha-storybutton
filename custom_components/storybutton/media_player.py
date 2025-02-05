@@ -111,6 +111,9 @@ class StoryButtonEntity(MediaPlayerEntity):
         self._state = STATE_ON
 
         # Retrieve latest data
+        # Note that when SB changes episodes, there's a delay for some reason
+        # So I think I need to increase the timeout of the `status` call
+        # Or t least let it handle more than 1 failure :)
         try:
             await self.async_update_media_title()
             await self.async_update_volume()

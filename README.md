@@ -8,7 +8,7 @@ This Home Assistant integration allows you to control playback and volume on you
 
 - Install from HACS
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=dacort&repository=ha-storybutton)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=dacort&repository=ha-storybutton&)
 
 - Go to your integrations dashboard and click "Add Integration"
 

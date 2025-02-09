@@ -76,11 +76,32 @@ class Storybutton:
         if not self.get_power_status():
             return State.OFF
 
+        return self._get_play_status_from_api()
+
+    def _get_play_status_from_upnp(self):
+        """Uses upnp to get the current play state.
+
+        Unfortunately, calling `AVTransport.GetTransportInfo` can sometimes
+        result in the Storybutton crashing, specifically:
+        - When it's trying to update
+        """
         resp = self.upnp_client.AVTransport.GetTransportInfo(InstanceID=0)
         current_state = resp.get("CurrentTransportState")
 
         return {"PAUSED_PLAYBACK": State.PAUSED, "PLAYING": State.PLAYING}.get(
             current_state, State.UNKNOWN
+        )
+
+    def _get_play_status_from_api(self):
+        """Gets the current play state from the device's API"""
+        status = self._playing_php_response()
+
+        if not status or status.get("result") == "fail":
+            return State.UNKNOWN
+
+        current_status = status.get("chStatus", "").replace("Play state: ", "")
+        return {"paused": State.PAUSED, "playing": State.PLAYING}.get(
+            current_status, State.UNKNOWN
         )
 
     def name(self) -> str:
@@ -172,3 +193,25 @@ class Storybutton:
             return resp.json().get("name", "")
         except Exception:
             return ""
+
+    def _playing_php_response(self) -> dict | None:
+        """Returns the decoded response from the frontend's playing.php API
+
+        e.g.
+        {
+            "name": "The Poison Type Dragon, The Corrupted Fairy Portal, and The Search for the Dragonlings - Cards of Power #26",
+            "error": "n",
+            "chStatus": "Play state: playing",
+            "AddDelBtn": "?",
+            "result": "success"
+        }
+
+        Returns:
+            dict: JSON response
+        """
+        try:
+            playing_endpoint = f"{self._endpoint}/php/playing.php"
+            resp = self._http_client.get(playing_endpoint)
+            return resp.json()
+        except Exception:
+            return None

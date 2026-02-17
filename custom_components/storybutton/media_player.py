@@ -46,22 +46,22 @@ async def async_setup_platform(
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up a Storybutton entity."""
-    # unique_id = config_entry.unique_id
     name = config_entry.data[CONF_NAME]
     host = config_entry.data[CONF_HOST]
 
-    device = StoryButtonEntity(hass, host, name)
+    device = StoryButtonEntity(hass, host, name, config_entry.entry_id)
     async_add_entities([device], update_before_add=True)
 
 
 class StoryButtonEntity(MediaPlayerEntity):
     """Representation of a Storybutton that communicates with your local device."""
 
-    def __init__(self, hass, host, name):
+    def __init__(self, hass, host, name, unique_id=None):
         """Initialize the media player."""
         self.hass = hass  # Store hass reference
         self._name = name
         self._host = host
+        self._attr_unique_id = unique_id
         self._state = STATE_OFF
         self._attr_volume_level = 0
         self._attr_media_title = ""

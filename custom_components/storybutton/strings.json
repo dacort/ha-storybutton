@@ -1,0 +1,42 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "title": "Add Storybutton",
+        "description": "Enter the address of your Storybutton. It will be identified automatically.",
+        "data": {
+          "host": "Host",
+          "name": "Name"
+        },
+        "data_description": {
+          "host": "IP address or hostname of the Storybutton.",
+          "name": "Optional name for the media player."
+        }
+      },
+      "discovery_confirm": {
+        "title": "Storybutton",
+        "description": "Do you want to set up {name}?"
+      },
+      "reconfigure": {
+        "title": "Reconfigure Storybutton",
+        "description": "Update the address Home Assistant uses to reach this Storybutton.",
+        "data": {
+          "host": "Host"
+        },
+        "data_description": {
+          "host": "New IP address or hostname of the Storybutton."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect — couldn't fetch device.xml from that address."
+    },
+    "abort": {
+      "already_configured": "This Storybutton is already configured; its address was updated.",
+      "cannot_connect": "Failed to connect to the discovered device.",
+      "wrong_device": "That address is a different Storybutton than the one configured here.",
+      "reconfigure_successful": "Storybutton address updated."
+    }
+  }
+}

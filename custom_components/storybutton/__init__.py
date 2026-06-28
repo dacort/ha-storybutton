@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DOMAIN, PLATFORMS
@@ -57,8 +59,9 @@ async def _async_backfill_identity(
     """Attach the stable UDN identity to a legacy entry, idempotently.
 
     Backfills ``entry.unique_id`` from the UDN (so DHCP discovery can match the
-    device after an IP change) and rewrites the entity registry unique_id from the
-    legacy ``entry_id`` to the UDN *in place*, preserving the entity_id. Both
+    device after an IP change) and rewrites both the entity registry unique_id and
+    the device registry identifier from the legacy ``entry_id`` to the UDN *in
+    place*, preserving the entity_id and avoiding a phantom duplicate device. All
     steps are no-ops once already applied, and are deferred gracefully when the
     device is unreachable (no UDN known yet).
     """
@@ -84,6 +87,28 @@ async def _async_backfill_identity(
             udn,
         )
         ent_reg.async_update_entity(reg_entry.entity_id, new_unique_id=udn)
+
+    # Re-key the device registry entry in place: the legacy device is identified
+    # by (DOMAIN, entry_id); the live identity is (DOMAIN, udn). Renaming it
+    # avoids orphaning the old device and spawning a duplicate. No-op once the
+    # device already carries the UDN identity, and guarded against collisions.
+    if udn == entry.entry_id:
+        return  # nothing to migrate — identity is already the entry_id
+    dev_reg = dr.async_get(hass)
+    if dev_reg.async_get_device(identifiers={(DOMAIN, udn)}) is not None:
+        return  # a device already owns the target identity; don't collide
+    old_device = dev_reg.async_get_device(identifiers={(DOMAIN, entry.entry_id)})
+    if old_device is None:
+        return  # no legacy device to migrate
+    _LOGGER.debug(
+        "Migrating device %s identifier (%s, %s) -> (%s, %s)",
+        old_device.id,
+        DOMAIN,
+        entry.entry_id,
+        DOMAIN,
+        udn,
+    )
+    dev_reg.async_update_device(old_device.id, new_identifiers={(DOMAIN, udn)})
 
 
 async def async_migrate_entry(
@@ -123,3 +148,20 @@ async def async_unload_entry(
 ) -> bool:
     """Unload a config entry."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant,
+    config_entry: "StorybuttonConfigEntry",
+    device_entry: DeviceEntry,
+) -> bool:
+    """Allow deleting a stale/orphaned device from the UI.
+
+    A device is considered *live* when it carries the entry's current
+    UDN-based identity ``(DOMAIN, unique_id or entry_id)``. The live device may
+    not be removed (HA would just recreate it); any other device tied to this
+    entry — e.g. one left orphaned by an in-place identity migration — can be
+    deleted by the user.
+    """
+    live_identifier = config_entry.unique_id or config_entry.entry_id
+    return (DOMAIN, live_identifier) not in device_entry.identifiers

@@ -6,10 +6,92 @@ import requests
 import upnpclient
 
 from custom_components.storybutton.storybutton import (
+    DeviceDescription,
     State,
     Storybutton,
     StorybuttonConfig,
 )
+
+
+# Verbatim device.xml from the live device (192.168.7.48). Kept exact so the
+# parser is regression-tested against the device's real format: UDN before
+# friendlyName, a namespaced dlna:X_DLNADOC element, and a serviceList.
+SAMPLE_DEVICE_XML = """<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<root xmlns="urn:schemas-upnp-org:device-1-0">
+<specVersion>
+<major>1</major>
+<minor>0</minor>
+</specVersion>
+<device>
+<UDN>uuid:50b25025-9478-8092-a31c-00112238d9ea</UDN>
+<friendlyName>SB-100-371C</friendlyName>
+<deviceType>urn:schemas-upnp-org:device:MediaRenderer:1</deviceType>
+<dlna:X_DLNADOC xmlns:dlna="urn:schemas-dlna-org:device-1-0">DMR-1.50</dlna:X_DLNADOC>
+<manufacturer>Storybutton</manufacturer>
+<manufacturerURL>https://storybutton.com/</manufacturerURL>
+<modelName>SB-100</modelName>
+<modelNumber>PR-100v2</modelNumber>
+<modelURL>http://192.168.7.48</modelURL>
+<modelDescription>Internet Radio 20250103.1801</modelDescription>
+<serialNumber>5025-9478-8092-a31c-0011-2238-d9ea-af4d</serialNumber>
+<presentationURL>http://192.168.7.48</presentationURL>
+<UPC>PR-100v2</UPC>
+<serviceList>
+<service>
+<serviceType>urn:schemas-upnp-org:service:RenderingControl:1</serviceType>
+<serviceId>urn:upnp-org:serviceId:RenderingControl</serviceId>
+<SCPDURL>/upnp/rc.xml</SCPDURL>
+<controlURL>/upnp/rc</controlURL>
+<eventSubURL>/upnp/re</eventSubURL>
+</service>
+</serviceList>
+</device>
+</root>
+"""
+
+
+class TestDeviceDescription:
+    def test_from_xml_parses_all_fields(self):
+        desc = DeviceDescription.from_xml(SAMPLE_DEVICE_XML)
+
+        assert desc.udn == "uuid:50b25025-9478-8092-a31c-00112238d9ea"
+        assert desc.friendly_name == "SB-100-371C"
+        assert desc.manufacturer == "Storybutton"
+        assert desc.model == "SB-100"
+        assert desc.sw_version == "Internet Radio 20250103.1801"
+        assert desc.serial == "5025-9478-8092-a31c-0011-2238-d9ea-af4d"
+
+    def test_from_xml_missing_optional_fields(self):
+        minimal = (
+            '<root xmlns="urn:schemas-upnp-org:device-1-0"><device>'
+            "<friendlyName>Bare</friendlyName>"
+            "<UDN>uuid:50b25025-9478-8092-a31c-00112238d9ea</UDN>"
+            "</device></root>"
+        )
+        desc = DeviceDescription.from_xml(minimal)
+
+        assert desc.friendly_name == "Bare"
+        assert desc.udn == "uuid:50b25025-9478-8092-a31c-00112238d9ea"
+        assert desc.manufacturer is None
+        assert desc.model is None
+        assert desc.sw_version is None
+        assert desc.serial is None
+
+    def test_from_xml_prefers_root_device_over_embedded(self):
+        nested = (
+            '<root xmlns="urn:schemas-upnp-org:device-1-0"><device>'
+            "<friendlyName>Root Device</friendlyName>"
+            "<UDN>uuid:50b25025-9478-8092-a31c-00112238d9ea</UDN>"
+            "<deviceList><device>"
+            "<friendlyName>Embedded</friendlyName>"
+            "<UDN>uuid:ffffffff-ffff-ffff-ffff-ffffffffffff</UDN>"
+            "</device></deviceList>"
+            "</device></root>"
+        )
+        desc = DeviceDescription.from_xml(nested)
+
+        assert desc.friendly_name == "Root Device"
+        assert desc.udn == "uuid:50b25025-9478-8092-a31c-00112238d9ea"
 
 
 @pytest.fixture

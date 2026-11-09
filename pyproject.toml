@@ -3,7 +3,7 @@ name = "ha-storybutton"
 version = "0.1.0"
 description = "Storybutton integration for Home Assistant"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14.2"
 dependencies = [
     "upnpclient",
 ]
@@ -11,5 +11,34 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=8.3.4",
-    "homeassistant==2024.12.5",
+    "homeassistant==2026.6.4",
+    "defusedxml",
+    "pytest-homeassistant-custom-component==0.13.340",
+]
+
+[tool.pytest.ini_options]
+# pytest-homeassistant-custom-component ships autouse async fixtures; its test
+# harness requires pytest-asyncio in auto mode.
+asyncio_mode = "auto"
+
+[tool.uv]
+# Some transitive macOS deps (e.g. pyobjc 10.x via bleak) build from sdist on
+# Python 3.14 and import pkg_resources in setup.py, which setuptools >=81
+# dropped. Pin the build-time setuptools so these legacy sdists still build.
+build-constraint-dependencies = ["setuptools<81"]
+# upnpclient drags in an ancient lxml (4.9.x), and bleak pins pyobjc 10.x;
+# neither compiles against the Python 3.14 C API. Force modern versions that
+# ship cp314 wheels.
+override-dependencies = [
+    "lxml>=6.0",
+    "pyobjc-core>=12",
+    "pyobjc-framework-cocoa>=12",
+    "pyobjc-framework-libdispatch>=12",
+    "pyobjc-framework-corebluetooth>=12",
+    # mashumaro 3.15 mis-compiles Union[str, list[str]] on Python 3.14
+    # (breaks webrtc_models import); 3.2x fixes it and stays within ~=3.13.
+    "mashumaro>=3.22",
+    # httpcore 1.0.7 (via respx, a phcc test dep) trips on typing.Union under
+    # Python 3.14; 1.0.9 fixes the import.
+    "httpcore>=1.0.9",
 ]

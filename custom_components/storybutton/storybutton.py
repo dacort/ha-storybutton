@@ -2,8 +2,10 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Optional
 
+import aiohttp
 import requests
 import upnpclient
+from defusedxml import ElementTree as DefusedET
 
 
 class State(Enum):
@@ -12,6 +14,69 @@ class State(Enum):
     ON = 2
     PLAYING = 3
     PAUSED = 4
+
+
+@dataclass
+class DeviceDescription:
+    """Parsed UPnP device description (device.xml).
+
+    Pure data + parsing — no Home Assistant dependencies, so it can be unit
+    tested in isolation and reused from every setup path (user, DHCP).
+
+    Note: the UDN embeds a placeholder MAC (00:11:22:...) that is *not* the
+    device's real network MAC (an Espressif 34:85:18:... address), so it is not
+    parsed here — the real MAC comes from DHCP discovery.
+    """
+
+    udn: str
+    friendly_name: str = ""
+    manufacturer: Optional[str] = None
+    model: Optional[str] = None
+    sw_version: Optional[str] = None
+    serial: Optional[str] = None
+
+    @classmethod
+    def from_xml(cls, text: str) -> "DeviceDescription":
+        """Build a DeviceDescription from a UPnP device.xml document.
+
+        Namespaces are ignored (matched by local tag name) and the first
+        occurrence of each tag in document order wins, so the root device's
+        values take precedence over any embedded devices.
+        """
+        root = DefusedET.fromstring(text)
+
+        fields: dict[str, str] = {}
+        for elem in root.iter():
+            tag = elem.tag.rsplit("}", 1)[-1]  # strip {namespace}
+            if tag not in fields and elem.text and elem.text.strip():
+                fields[tag] = elem.text.strip()
+
+        return cls(
+            udn=fields.get("UDN", ""),
+            friendly_name=fields.get("friendlyName", ""),
+            manufacturer=fields.get("manufacturer"),
+            model=fields.get("modelName"),
+            # This device carries its firmware string in <modelDescription>
+            # (e.g. "Internet Radio 20250103.1801").
+            sw_version=fields.get("modelDescription"),
+            serial=fields.get("serialNumber"),
+        )
+
+
+async def async_fetch_device_description(
+    session: aiohttp.ClientSession, host: str, timeout: int = 5
+) -> DeviceDescription:
+    """Fetch and parse ``device.xml`` from a Storybutton at ``host``.
+
+    Uses the passed-in aiohttp session (the Home Assistant shared session in
+    practice). Raises on connection/HTTP errors so callers can map them to a
+    ``cannot_connect`` flow error.
+    """
+    url = f"http://{host}/device.xml"
+    async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout)) as resp:
+        resp.raise_for_status()
+        text = await resp.text()
+    return DeviceDescription.from_xml(text)
 
 
 @dataclass
